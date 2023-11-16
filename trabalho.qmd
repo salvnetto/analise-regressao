@@ -32,79 +32,30 @@ execute:
 ```{r}
 library(reticulate)
 library(palmerpenguins)
+library(reglin)
 
 data(penguins)
 data = penguins
-```
-
-```{python}
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-
-# Opção para mostrar todas as colunas ao visualizar o dataframe
-pd.set_option('display.max_columns', None)
-
-data = r.data
-data = data.dropna()
-```
-
-```{python}
-#| echo: true
-data.head()
+data = na.omit(data)
 ```
 
 
-```{python}
-#| echo: true
-data.shape
-```
-```{python}
-#| echo: true
-data.describe()
-```
-
-```{python}
-y = data['body_mass_g']
-
-# Cria um grid 1 por 2 (uma linha, duas colunas)
-fig, axes = plt.subplots(1, 2)
-
-# No eixo 1 chamado axes[0] (linha 1, coluna 1), faça um histograma
-axes[0].hist(y, edgecolor='white')
-axes[0].set_xlabel('Massa Corporal em Gramas')
-# No eixo 2 chamado axes[1] (linha 1, coluna 2), faça um histograma
-axes[1].boxplot(y, vert= True, showmeans= True)
-axes[1].set_xticklabels(['Massa Corporal em Gramas'])
-axes[1].yaxis.tick_right()
-plt.show()
-```
-
-```{python}
-data_pairs = data.drop(['year'], axis= 1)
-g = sns.PairGrid(data_pairs)
-g.map_diag(sns.histplot)
-g.map_offdiag(sns.scatterplot)
-g.add_legend()
-plt.show()
-```
-
-# Fit
-
-```{python}
-fit1 = smf.ols('body_mass_g ~ 1', data= data).fit()
-fit2 = smf.ols('body_mass_g ~ species + island + bill_length_mm + bill_depth_mm + flipper_length_mm + sex + year', data = data).fit()
-```
-
-```{python}
-print(fit1.summary())
-print(fit2.summary())
-```
 ```{r}
+fit1 = lm('body_mass_g ~ flipper_length_mm', data= data)
+fit2 = lm('body_mass_g ~ bill_length_mm*species + bill_depth_mm + flipper_length_mm', data= data)
+
 ```
 
 
+```{r}
+step(
+  fit2,
+  direction = "backward",
+  scope = list(lower= fit1)
+)
+```
+
+```{r}
+
+```
 
