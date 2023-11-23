@@ -24,38 +24,300 @@ format:
 execute:
   echo: false
   warning: false
-  output: true
+  output: false
 ---
 
-# Estudo sobre a variável resposta
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.stats.stattools import durbin_watson
+from statsmodels.graphics import utils
+from statsmodels.compat.python import lzip
+from scipy import stats
+```
 
 ```{r}
-library(reticulate)
 library(palmerpenguins)
-library(reglin)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(reticulate)
 
-data(penguins)
 data = penguins
-data = na.omit(data)
 ```
 
-
-```{r}
-fit1 = lm('body_mass_g ~ flipper_length_mm', data= data)
-fit2 = lm('body_mass_g ~ bill_length_mm*species + bill_depth_mm + flipper_length_mm', data= data)
-
+```{python}
+data = r.data
+data = data.dropna()
+data['year'] = data['year'].astype(str)
 ```
 
+# Introdução
 
-```{r}
-step(
-  fit2,
-  direction = "backward",
-  scope = list(lower= fit1)
-)
+O banco de dados possui 333 linhas não nulas e 8 colunas
+ 
+```{python}
+head = data.head()
+shape = data.shape
+describe = data.describe()
+groupby_species = data.groupby(['species'])['island'].value_counts().reset_index()
 ```
 
-```{r}
+```{r tabela-head}
+#| output: true
+#| label: tbl-head
+#| tbl-cap: "Visualização das 5 Primeiras Linhas do Banco de Dados"
+
+kable(py$head, booktabs= T, linesep = "") %>% 
+  kable_styling(latex_options = c("striped", "HOLD_position", "scale_down")) %>% 
+  row_spec(0, bold= T)
+```
+
+```{r tabela-describe}
+#| output: true
+#| label: tbl-describe
+#| tbl-cap: "Sumário do Banco de Dados"
+
+kable(py$describe, booktabs= T, linesep = "") %>% 
+  kable_styling(latex_options = c("striped", "HOLD_position", "scale_down")) %>% 
+  row_spec(0, bold= T)
+```
+
+# Seleção de Variáveis
+
+```{python grafico-pairplot}
+#| output: true
+#| label: fig-pairplot
+#| fig-cap: "Relações em Pares por Especies"
+#| layout-ncol: 2
+#| fig-subcap: 
+#|    - "Species"
+#|    - "Sex"
+#|    - "Island"
+#|    - "Year"
+
+g1 = sns.pairplot(data, hue="species", height= 1.5, diag_kind="hist")
+plt.show()
+
+g2 = sns.pairplot(data, hue="sex", height= 1.5, diag_kind="hist")
+plt.show()
+
+g3 = sns.pairplot(data, hue="island", height= 1.5, diag_kind="hist")
+plt.show()
+
+g4 = sns.pairplot(data, hue="year", height= 1.5, diag_kind="hist")
+plt.show()
+```
+```{r tabela-groupby_species}
+#| output: true
+#| label: tbl-groupby_species
+#| tbl-cap: "Quantidade de Espécies por Ilha"
+
+kable(py$groupby_species, booktabs= T, linesep = "") %>% 
+  row_spec(0, bold= T) %>% 
+  collapse_rows(1, latex_hline = "major")
+```
+
+```{python grafico-heatmap}
+#| output: true
+#| label: fig-heatmap
+#| fig-cap: "Correlações entre as Variáveis do Conjunto de Dados"
+
+cor = data[['bill_length_mm','bill_depth_mm','flipper_length_mm','body_mass_g']].corr()
+
+fig, ax = plt.subplots(figsize= (12, 10))
+g = sns.heatmap(cor, annot= True, vmin= -1, vmax= 1, linewidth=.5, cmap='vlag', ax= ax)
+plt.xticks(rotation=45)
+plt.yticks(rotation=0)
+plt.show()
+```
+
+# Ajuste do Modelo e Multicolinearidade
+
+```{python}
+#| output: true
+
+modelo = smf.ols(
+  formula= 'body_mass_g ~ flipper_length_mm + bill_depth_mm + sex',
+  data= data
+  ).fit()
+
+print(modelo.summary())
+```
+
+```{python}
+#| output: true
+#| echo: true
+
+X = modelo.model.exog
+[variance_inflation_factor(X, i) for i in range(X.shape[1])]
+```
+```{python}
+#| output: true
+#| echo: true
+
+modelo.bse
+```
+
+# Resíduos
+
+```{python}
+residuals = modelo.resid 
+fitted_value = modelo.fittedvalues 
+stand_resids = modelo.resid_pearson 
+influence = modelo.get_influence() 
+leverage = influence.hat_matrix_diag 
+p = modelo.model.exog.shape[1]
+n = modelo.model.exog.shape[0]
+```
+
+```{python grafico-residuos}
+#| output: true
+#| label: fig-residuos
+#| fig-cap: "Análise Gráfica dos Resíduos"
+
+fig, ax = plt.subplots(nrows=2, ncols=2, figsize= (10, 8)) 
+  
+# Residual vs Fitted Plot 
+sns.residplot(x=fitted_value, y=residuals, ax=ax[0, 0], lowess= True) 
+ax[0, 0].axhline(y=0, color='grey', linestyle='dashed') 
+ax[0, 0].set_xlabel('Fitted Values') 
+ax[0, 0].set_ylabel('Residuals') 
+ax[0, 0].set_title('Residuals vs Fitted Fitted') 
+  
+# Normal Q-Q plot 
+sm.qqplot(residuals, fit=True, line='45',ax=ax[0, 1]) 
+ax[0, 1].set_title('Normal Q-Q') 
+  
+# Scale-Location Plot 
+sns.residplot(x=fitted_value, y=residuals, ax=ax[1, 0], lowess= True) 
+ax[1, 0].axhline(y=0, color='grey', linestyle='dashed') 
+ax[1, 0].set_xlabel('Fitted values') 
+ax[1, 0].set_ylabel('Sqrt(standardized residuals)') 
+ax[1, 0].set_title('Scale-Location Plot') 
+  
+# Residual vs Leverage Plot 
+sns.residplot(x=leverage, y=stand_resids, ax=ax[1, 1], lowess= True) 
+ax[1, 1].axhline(y=0, color='grey', linestyle='dashed')
+ax[1, 1].axvline(x= 2*p/n, color='red', linestyle='--')
+ax[1, 1].axhline(y= stats.t.ppf(0.05/(2*n), n-p-1), color='red', linestyle='--')
+ax[1, 1].axhline(y= -stats.t.ppf(0.05/(2*n), n-p-1), color='red', linestyle='--')
+ax[1, 1].set_xlabel('Leverage') 
+ax[1, 1].set_ylabel('Sqrt(standardized residuals)') 
+ax[1, 1].set_title('Residuals vs Leverage Plot') 
+  
+  
+plt.tight_layout() 
+plt.show() 
+```
+
+```{python grafico-parcial}
+#| output: true
+#| label: fig-parcial
+#| fig-cap: "Regressão Parcial"
+#| layout-ncol: 2
+#| fig-subcap: 
+#|    - "Flipper Length"
+#|    - "Bill Depth"
+
+
+# Regressão Parcial 'flipper_length_mm'
+fig1 = plt.figure(figsize=(10, 8))
+g1 = sm.graphics.plot_regress_exog(modelo, 'flipper_length_mm', fig= fig1)
+plt.show()
+
+# Regressão Parcial 'bill_depth_mm'
+fig2 = plt.figure(figsize=(10, 8))
+g2 = sm.graphics.plot_regress_exog(modelo, 'bill_depth_mm', fig= fig2)
+plt.show()
+```
+```{python}
+#| output: true
+#| echo: true
+
+print('Shapiro Statistic: ', stats.shapiro(residuals)[0])
+print('Shapiro P-Value: ', stats.shapiro(residuals)[1])
+
+print('\nDurbin Watson Statistic:', durbin_watson(residuals))
+
+print('\nOutlier Test:', modelo.outlier_test(cutoff= 0.05))
+```
+# Influência
+
+```{python}
+summ_df = influence.summary_frame().head()
+```
+
+```{r tabela-influencia}
+#| output: true
+#| label: tbl-influencia
+#| tbl-cap: "Sumário das Observações Influentes"
+
+kable(py$summ_df, booktabs= T, linesep = "") %>% 
+  kable_styling(latex_options = c("striped", "HOLD_position", "scale_down")) %>% 
+  row_spec(0, bold= T)
+```
+
+```{python}
+#| output: true
+#| echo: true
+
+# DFFitS Threshold
+summ_df[summ_df['dffits'] > 3*np.sqrt(p/(n-p))]['dffits']
+```
+```{python grafico-covratio}
+#| output: true
+#| label: fig-covratio
+#| fig-cap: "COVRATIO"
+
+
+# COVRATION Threshold
+y = 1 - np.abs(influence.cov_ratio)
+nobs = len(modelo.model.endog)
+index = np.arange(nobs)
+threshold = (3*p)/n
+large_points = y > threshold
+labels = modelo._results.model.data.row_labels
+psize = 3 * np.ones(nobs)
+
+# Gráfico
+fig, ax = plt.subplots(figsize= (8, 6))
+ax.scatter(index, y)
+ax = utils.annotate_axes(np.where(large_points)[0], labels,
+                                 lzip(index, y),
+                                 lzip(-psize, psize), "large",
+                                 ax)
+font = {"fontsize": 12, "color": "black"}
+ax.set_ylabel('|1-COVRATIO|', **font)
+ax.set_xlabel("Observation", **font)
+ax.set_title('COVRATIO', **font)
+plt.show()
+```
+
+```{python grafico-hatcooks}
+#| output: true
+#| label: fig-hatcooks
+#| fig-cap: "Medidas de Influência"
+#| layout-ncol: 2
+#| fig-subcap: 
+#|    - "Leverage"
+#|    - "Distância de Cooks"
+#|    - "DFBetaS"
+
+# Leverage, Cooks and DFBetaS Threshold
+influence.plot_index(y_var="hat_diag", threshold= (3*p)/n)
+plt.show()
+influence.plot_index(y_var="cooks", threshold= stats.f.ppf(0.5,p, n-p))
+plt.show()
+for i in range(1, p):
+  influence.plot_index(y_var="dfbeta", idx= i, threshold= 1)
+  plt.show()
 
 ```
 
