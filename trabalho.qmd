@@ -9,13 +9,14 @@ lang: pt
 format: 
   pdf:
     toc: true
+    fig-pos: "H"
     #toc-title: "Summary"
     toc-depth: 3
     #toc-location: right
     number-sections: true
     number-depth: 3
-    documentclass: report
-    fig-cap-location: top
+    documentclass: article
+    fig-cap-location: bottom
     geometry:
       - top=3cm
       - left=3cm
@@ -95,6 +96,7 @@ kable(py$describe, booktabs= T, linesep = "") %>%
 #| output: true
 #| label: fig-pairplot
 #| fig-cap: "Relações em Pares por Especies"
+#| fig-pos: "H"
 #| layout-ncol: 2
 #| fig-subcap: 
 #|    - "Species"
@@ -127,6 +129,7 @@ kable(py$groupby_species, booktabs= T, linesep = "") %>%
 ```{python grafico-heatmap}
 #| output: true
 #| label: fig-heatmap
+#| fig-pos: "H"
 #| fig-cap: "Correlações entre as Variáveis do Conjunto de Dados"
 
 cor = data[['bill_length_mm','bill_depth_mm','flipper_length_mm','body_mass_g']].corr()
@@ -144,7 +147,7 @@ plt.show()
 #| output: true
 
 modelo = smf.ols(
-  formula= 'body_mass_g ~ flipper_length_mm + bill_depth_mm + sex',
+  formula= 'body_mass_g ~ flipper_length_mm + bill_depth_mm + bill_length_mm + sex',
   data= data
   ).fit()
 
@@ -180,6 +183,7 @@ n = modelo.model.exog.shape[0]
 ```{python grafico-residuos}
 #| output: true
 #| label: fig-residuos
+#| fig-pos: "H"
 #| fig-cap: "Análise Gráfica dos Resíduos"
 
 fig, ax = plt.subplots(nrows=2, ncols=2, figsize= (10, 8)) 
@@ -217,38 +221,24 @@ plt.tight_layout()
 plt.show() 
 ```
 
-```{python grafico-parcial}
-#| output: true
-#| label: fig-parcial
-#| fig-cap: "Regressão Parcial"
-#| layout-ncol: 2
-#| fig-subcap: 
-#|    - "Flipper Length"
-#|    - "Bill Depth"
-
-
-# Regressão Parcial 'flipper_length_mm'
-fig1 = plt.figure(figsize=(10, 8))
-g1 = sm.graphics.plot_regress_exog(modelo, 'flipper_length_mm', fig= fig1)
-plt.show()
-
-# Regressão Parcial 'bill_depth_mm'
-fig2 = plt.figure(figsize=(10, 8))
-g2 = sm.graphics.plot_regress_exog(modelo, 'bill_depth_mm', fig= fig2)
-plt.show()
-```
 ```{python}
 #| output: true
-#| echo: true
 
-print('Shapiro Statistic: ', stats.shapiro(residuals)[0])
-print('Shapiro P-Value: ', stats.shapiro(residuals)[1])
+norm_test = stats.shapiro(residuals)
+autocorr_errors = durbin_watson(residuals)
 
-print('\nDurbin Watson Statistic:', durbin_watson(residuals))
-
-print('\nOutlier Test:', modelo.outlier_test(cutoff= 0.05))
+print('Shapiro Statistic: ', round(norm_test[0], 3))
+print('Shapiro P-Value: ', round(norm_test[1], 3))
+print('\nDurbin Watson Statistic:', autocorr_errors)
 ```
-# Influência
+
+No gráfico de `Resíduos versus valores ajustados` e `Gráfico escala-locação`, podemos observar que a validade da suposição de linearidade existe no modelo, assim como a validade da suposição de homocedasticidade das variâncias. Isso é evidenciado pelo padrão relativamente aleatório dos resíduos em torno de zero, apesar de não ser perfeito.
+
+O teste de *Durbin-Watson* para autocorrelação dos erros não mostra indícios de autocorrelação. Além disso, na figura `Normal Q-Q`, a verificação da suposição de normalidade dos erros é confirmada, e o teste de *Shapiro-Wilk* confirma esse resultado.
+
+No gráfico `Resíduos versus Alavancagem`, observamos a presença de pontos de alavancagem, mas não identificamos pontos inconsistentes. Portanto, não atribuiremos atenção excessiva a esses pontos.
+
+## Influência
 
 ```{python}
 summ_df = influence.summary_frame().head()
@@ -271,10 +261,12 @@ kable(py$summ_df, booktabs= T, linesep = "") %>%
 # DFFitS Threshold
 summ_df[summ_df['dffits'] > 3*np.sqrt(p/(n-p))]['dffits']
 ```
+
 ```{python grafico-covratio}
 #| output: true
 #| label: fig-covratio
 #| fig-cap: "COVRATIO"
+#| fig-pos: "H"
 
 
 # COVRATION Threshold
@@ -304,11 +296,15 @@ plt.show()
 #| output: true
 #| label: fig-hatcooks
 #| fig-cap: "Medidas de Influência"
-#| layout-ncol: 2
+#| fig-pos: "H"
+#| layout-ncol: 3
 #| fig-subcap: 
+#|    - "DF Beta (bill_depth_mm)"
+#|    - "DF Beta (bill_length_mm)" 
 #|    - "Leverage"
 #|    - "Distância de Cooks"
-#|    - "DFBetaS"
+#|    - "DFBeta (sex)"
+#|    - "DFBeta (flipper_length_mm)"
 
 # Leverage, Cooks and DFBetaS Threshold
 influence.plot_index(y_var="hat_diag", threshold= (3*p)/n)
@@ -320,4 +316,71 @@ for i in range(1, p):
   plt.show()
 
 ```
+
+  Em resumo, tanto as inspeções visuais quanto as análises estatísticas indicam que as observações não apresentam problemas significativos ou influências prejudiciais para a validade do nosso modelo.
+
+## Regressão Parcial
+
+```{python grafico-parcial}
+#| output: true
+#| label: fig-parcial
+#| fig-cap: "Regressão Parcial"
+#| fig-pos: "H"
+#| layout: [[1, 1], [1]]
+#| fig-subcap: 
+#|    - "Bill Depth"
+#|    - "Bill Length"
+#|    - "Flipper Length"
+
+
+# Regressão Parcial 'flipper_length_mm'
+fig1 = plt.figure(figsize=(10, 8))
+g1 = sm.graphics.plot_regress_exog(modelo, 'flipper_length_mm', fig= fig1)
+plt.show()
+
+# Regressão Parcial 'bill_depth_mm'
+fig2 = plt.figure(figsize=(10, 8))
+g2 = sm.graphics.plot_regress_exog(modelo, 'bill_depth_mm', fig= fig2)
+plt.show()
+
+# Regressão Parcial 'bill_depth_mm'
+fig3 = plt.figure(figsize=(10, 8))
+g3 = sm.graphics.plot_regress_exog(modelo, 'bill_length_mm', fig= fig3)
+plt.show()
+```
+
+Ao analisar o @fig-parcial-3, notamos um padrão nulo na variável `bill_length_mm`, sugerindo que essa variável explicativa pode não ser necessária no modelo. Para confirmar essa suspeita, realizamos o teste t, e a variável `bill_length_mm` apresenta um valor p de $0.619$. Com base nesse resultado, temos evidências suficientes para considerar a remoção dessa variável do modelo.
+
+```{python}
+#| output: true
+print(modelo.summary())
+```
+### Removendo 'bill_length_mm'
+
+```{python}
+#| output: true
+
+modelo = smf.ols(
+  formula= 'body_mass_g ~ flipper_length_mm + bill_depth_mm + sex',
+  data= data
+  ).fit()
+
+print(modelo.summary())
+```
+
+```{python}
+#| output: true
+#| echo: true
+
+X = modelo.model.exog
+[variance_inflation_factor(X, i) for i in range(X.shape[1])]
+```
+
+```{python}
+#| output: true
+#| echo: true
+
+modelo.bse
+```
+# Conclusões
 
